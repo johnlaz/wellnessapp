@@ -486,6 +486,18 @@ body{font-family:var(--font-body);background:var(--bg);color:var(--text);min-hei
   .stat-value{font-size:18px;} .card{padding:.875rem;}
 }
 @media print{.app-header,.nav-container,.btn,.session-toggle,.modal-overlay,.settings-wrap{display:none!important;}body{background:white;color:#1a1a1a;}.panel{display:block!important;margin-bottom:3rem;}}
+/* ── Session Sync ── */
+.sync-panel-group{margin-bottom:1.5rem;}
+.sync-panel-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--gold);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.sync-diff-row{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04);}
+.sync-diff-row:last-child{border-bottom:none;}
+.sync-diff-toggle{flex-shrink:0;margin-top:2px;width:18px;height:18px;accent-color:var(--teal);cursor:pointer;}
+.sync-diff-body{flex:1;min-width:0;}
+.sync-diff-field{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:4px;}
+.sync-diff-old{font-size:12px;color:var(--text-muted);text-decoration:line-through;margin-bottom:2px;word-break:break-word;}
+.sync-diff-new{font-size:13px;color:var(--teal);word-break:break-word;}
+.sync-empty-state{text-align:center;padding:2rem;color:var(--text-muted);font-size:13px;}
+.sync-sessions-used{font-size:12px;color:var(--text-muted);margin-bottom:1.5rem;padding:10px 14px;background:rgba(45,212,191,.06);border:1px solid rgba(45,212,191,.15);border-radius:8px;line-height:1.6;}
 </style>
 </head>
 <body>
@@ -512,6 +524,10 @@ body{font-family:var(--font-body);background:var(--bg);color:var(--text);min-hei
         <div class="settings-menu-header">Settings & Tools</div>
 
         <div class="settings-group-label">Vault — Your Data</div>
+        <button class="settings-item" onclick="closeSettingsMenu();openSyncModal();" title="Groq reviews your recent sessions and proposes updates to strategy panels">
+          <span class="settings-item-icon" style="color:var(--teal);">⟳</span>
+          <div><div class="settings-item-title">Sync Panels from Sessions</div><div class="settings-item-sub">Groq reviews recent sessions — you approve changes</div></div>
+        </button>
         <button class="settings-item" onclick="closeSettingsMenu();exportVault();">
           <span class="settings-item-icon">⬇</span>
           <div><div class="settings-item-title">Export Vault (JSON)</div><div class="settings-item-sub">Download all your data — no app code</div></div>
@@ -976,17 +992,25 @@ body{font-family:var(--font-body);background:var(--bg);color:var(--text);min-hei
         <button class="btn btn-ghost btn-sm" onclick="copySessionPrompt()" title="Copy a structured prompt to use with your AI therapist, then paste the transcript back here">
           📋 Copy Prompt
         </button>
-        <label class="btn btn-ghost btn-sm" style="cursor:pointer;" title="Upload a session transcript — AI will parse it into the fields below">
-          ⬆ Upload Session
-          <input type="file" id="sess-upload-input" accept=".txt,.md,.text" style="display:none" onchange="uploadSessionFile(event)">
-        </label>
+        <button class="btn btn-ghost btn-sm" onclick="togglePastePanel()" id="paste-toggle-btn" title="Paste a full AI session transcript — Groq will parse it into the fields below">
+          ⬇ Paste Transcript
+        </button>
       </div>
     </div>
-    <p class="modal-sub">Copy the prompt to use with your AI therapist, paste results back via Upload, or fill manually. AI Summary generates a clinical analysis before saving.</p>
+    <p class="modal-sub">Copy the prompt, run your session in any AI, then paste the full transcript back here to auto-fill. Or fill fields manually.</p>
 
-    <!-- Upload parse status -->
+    <!-- Paste transcript panel -->
+    <div id="sess-paste-panel" style="display:none;margin-bottom:1.25rem;">
+      <div class="form-group" style="margin-bottom:8px;">
+        <label class="form-label">Paste Full AI Session Transcript</label>
+        <textarea class="form-textarea" id="sess-paste-input" rows="6" placeholder="Paste your complete AI session output here — Groq will read it and fill the fields below automatically."></textarea>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="parseSessionTranscript()" id="sess-parse-btn" style="width:100%;">✦ Parse with Groq → Auto-fill Fields</button>
+    </div>
+
+    <!-- Parse status -->
     <div id="sess-upload-status" style="display:none;margin-bottom:1rem;" class="ai-summary-box">
-      <div class="ai-label"><span class="spinner"></span> <span id="sess-upload-label">Parsing session file…</span></div>
+      <div class="ai-label"><span class="spinner"></span> <span id="sess-upload-label">Parsing transcript…</span></div>
     </div>
 
     <div class="form-group"><label class="form-label">Session Title</label><input class="form-input" id="sess-title" type="text" placeholder="e.g. School aggression discussion, April 14"></div>
@@ -1045,6 +1069,25 @@ body{font-family:var(--font-body);background:var(--bg);color:var(--text);min-hei
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeVaultEditor()">Cancel</button>
       <button class="btn btn-primary" onclick="saveVaultEdits()">Apply & Refresh All Tabs</button>
+    </div>
+  </div>
+</div>
+
+<!-- SESSION SYNC MODAL -->
+<div class="modal-overlay" id="syncModal">
+  <div class="modal" style="width:min(680px,100vw);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+      <h3 style="margin-bottom:0;">Sync Panels from Sessions</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeSyncModal()">✕ Close</button>
+    </div>
+    <p class="modal-sub">Groq reviews your most recent sessions and proposes targeted updates to your strategy panels. Review each change and toggle off anything you want to keep. Only checked changes are applied.</p>
+    <div id="sync-modal-body">
+      <div class="sync-empty-state">Click "Analyze Sessions" to begin.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeSyncModal()">Cancel</button>
+      <button class="btn btn-ghost btn-sm" id="sync-analyze-btn" onclick="runSessionSync()" style="color:var(--teal);border-color:rgba(45,212,191,.3);">⟳ Analyze Sessions</button>
+      <button class="btn btn-primary" id="sync-apply-btn" onclick="applySessionSync()" style="display:none;">✓ Apply Selected Changes</button>
     </div>
   </div>
 </div>
@@ -1422,7 +1465,9 @@ function openAddSessionModal()  { document.getElementById('addSessionModal').cla
 function closeAddSessionModal() {
   document.getElementById('addSessionModal').classList.remove('open');
   document.getElementById('sess-upload-status').style.display = 'none';
-  document.getElementById('sess-upload-input').value = '';
+  document.getElementById('sess-paste-panel').style.display = 'none';
+  document.getElementById('paste-toggle-btn').textContent = '⬇ Paste Transcript';
+  document.getElementById('sess-paste-input').value = '';
 }
 
 // ── COPY SESSION PROMPT ──
@@ -1494,6 +1539,231 @@ async function uploadSessionFile(event) {
   event.target.value = '';
 }
 
+function togglePastePanel() {
+  const panel = document.getElementById('sess-paste-panel');
+  const btn   = document.getElementById('paste-toggle-btn');
+  const open  = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  btn.textContent = open ? '✕ Close Paste' : '⬇ Paste Transcript';
+  if (open) document.getElementById('sess-paste-input').focus();
+}
+
+async function parseSessionTranscript() {
+  const text = document.getElementById('sess-paste-input').value.trim();
+  if (!text) { showToast('Paste a session transcript first.'); return; }
+  if (!GROQ_KEY) { showToast('Set your Groq API key in Settings first.'); return; }
+
+  const statusBox   = document.getElementById('sess-upload-status');
+  const statusLabel = document.getElementById('sess-upload-label');
+  const btn         = document.getElementById('sess-parse-btn');
+
+  statusBox.style.display = 'block';
+  statusLabel.textContent = 'Parsing transcript with Groq…';
+  btn.disabled = true; btn.textContent = 'Parsing…';
+
+  try {
+    const raw = await callGroq([
+      { role:'system', content:`You are a clinical session parser. Given a therapy or strategy session transcript, extract the key structured fields. Respond ONLY with valid JSON, no markdown:\n{"title":"...","date":"...","category":"General|Family|Personal|Child|Relationship|Business|Progress","problem":"...","solution":"...","insight":"...","tags":"..."}` },
+      { role:'user',   content:`Parse this session transcript and extract the fields:\n\n${text.slice(0, 6000)}` }
+    ], 600, 0.3, true);
+
+    const parsed = JSON.parse((raw || '').replace(/```json|```/g, '').trim());
+    const fields = { 'sess-title':parsed.title, 'sess-date':parsed.date, 'sess-problem':parsed.problem, 'sess-solution':parsed.solution, 'sess-insight':parsed.insight, 'sess-tags':parsed.tags };
+    Object.entries(fields).forEach(([id, val]) => { const el = document.getElementById(id); if (el && val) el.value = val; });
+    const catEl = document.getElementById('sess-category');
+    if (catEl && parsed.category) { const opt = [...catEl.options].find(o => o.value === parsed.category); if (opt) catEl.value = parsed.category; }
+
+    statusBox.style.display = 'none';
+    document.getElementById('sess-paste-panel').style.display = 'none';
+    document.getElementById('paste-toggle-btn').textContent = '⬇ Paste Transcript';
+    showToast('✓ Fields auto-filled. Review and save when ready.');
+  } catch(e) {
+    statusBox.style.display = 'none';
+    showToast('Could not parse transcript. Check your Groq key or try again.');
+  }
+
+  btn.disabled = false; btn.textContent = '✦ Parse with Groq → Auto-fill Fields';
+}
+
+// ════════════════════════════════════════════════════════
+// SESSION SYNC ENGINE
+// ════════════════════════════════════════════════════════
+let _syncProposals = []; // [{panel, field, path, label, oldVal, newVal}]
+
+function openSyncModal() {
+  _syncProposals = [];
+  const body = document.getElementById('sync-modal-body');
+  body.innerHTML = '<div class="sync-empty-state">Click "Analyze Sessions" to begin.</div>';
+  document.getElementById('sync-apply-btn').style.display = 'none';
+  document.getElementById('syncModal').classList.add('open');
+}
+function closeSyncModal() { document.getElementById('syncModal').classList.remove('open'); }
+
+async function runSessionSync() {
+  if (!GROQ_KEY) { showToast('Set your Groq API key in Settings first.'); return; }
+  const sessions = VAULT.sessions;
+  if (!sessions.length) { showToast('No sessions in vault to sync from.'); return; }
+
+  const btn  = document.getElementById('sync-analyze-btn');
+  const body = document.getElementById('sync-modal-body');
+  btn.disabled = true; btn.textContent = '⟳ Analyzing…';
+  body.innerHTML = '<div class="sync-empty-state"><span class="spinner"></span> Groq is reviewing your sessions…</div>';
+  document.getElementById('sync-apply-btn').style.display = 'none';
+
+  // Category → panel mapping
+  const CAT_MAP = {
+    Business: ['business'], Progress: ['business','personal'],
+    Personal: ['personal'], Family: ['personal','care'],
+    Relationship: ['personal'], Child: ['care','personal'],
+    General: ['audit','personal','business','care','future']
+  };
+
+  // Grab last 5 sessions, group by relevant panels
+  const recentSessions = sessions.slice(-5);
+  const sessionSummary = recentSessions.map((s,i) =>
+    `Session ${i+1} [${s.category||'General'}] — ${s.date||''}:\nTitle: ${s.title}\nProblem: ${s.problem||''}\nStrategy: ${s.solution||''}\nInsight: ${s.insight||''}`
+  ).join('\n\n');
+
+  // Build a compact snapshot of current updatable vault fields
+  const vaultSnapshot = {
+    audit: {
+      stats: VAULT.audit.stats.map(s => ({label:s.label, value:s.value, desc:s.desc})),
+      assessmentInsight: VAULT.audit.assessmentInsight
+    },
+    care: {
+      stats: VAULT.care.stats.map(s => ({label:s.label, value:s.value, desc:s.desc})),
+      cards: VAULT.care.cards.map(c => ({title:c.title, body:c.body}))
+    },
+    personal: {
+      cards: VAULT.personal.cards.map(c => ({title:c.title, body:c.body})),
+      priorities: VAULT.personal.priorities.map(p => ({rank:p.rank, label:p.label, step:p.step}))
+    },
+    business: {
+      options: VAULT.business.options.map(o => ({num:o.num, title:o.title, body:o.body})),
+      partnerInsight: VAULT.business.partnerInsight
+    },
+    future: {
+      timeline: VAULT.future.timeline.map(t => ({date:t.date, head:t.head, body:t.body}))
+    }
+  };
+
+  const systemPrompt = `You are a clinical behavioral analyst and personal strategy advisor. You will be given recent therapy/strategy session notes and a snapshot of a user's existing strategy vault. Your job is to propose targeted, evidence-based updates to vault fields based only on what the sessions actually reveal.
+
+RULES:
+- Only propose changes where sessions clearly support an update
+- Do NOT change structural fields (titles, colors, names, icons, ranks, numbers of items)
+- You MAY update: stat values/descs, card body text, priority step text, option body text, insight fields, timeline body text
+- Keep proposed new values concise and grounded — no fluff
+- Filter by relevance: Business sessions → business/audit; Personal/Family/Relationship → personal/care; Child → care; General → all
+- If nothing meaningful should change for a panel, omit it
+
+Respond ONLY with valid JSON (no markdown) in this exact structure:
+{
+  "sessionsUsed": "brief description of which sessions informed this",
+  "proposals": [
+    {
+      "panel": "audit|care|personal|business|future",
+      "field": "human-readable field name e.g. 'Care Stats — Mood Score'",
+      "path": "dot-path to the field e.g. 'audit.stats.0.value' or 'personal.priorities.1.step'",
+      "oldVal": "current value",
+      "newVal": "proposed new value"
+    }
+  ]
+}`;
+
+  try {
+    const raw = await callGroq([
+      { role:'system', content: systemPrompt },
+      { role:'user',   content: `RECENT SESSIONS:\n${sessionSummary}\n\nCURRENT VAULT SNAPSHOT:\n${JSON.stringify(vaultSnapshot, null, 2)}` }
+    ], 1200, 0.4, true);
+
+    const result = JSON.parse((raw||'').replace(/```json|```/g,'').trim());
+    const proposals = (result.proposals || []).filter(p => p.path && p.newVal && p.newVal !== p.oldVal);
+
+    _syncProposals = proposals;
+    renderSyncProposals(result.sessionsUsed || '', proposals);
+
+  } catch(e) {
+    body.innerHTML = `<div class="sync-empty-state">⚠ Could not analyze sessions. Check your Groq key and try again.<br><small style="color:var(--red)">${e.message||''}</small></div>`;
+  }
+
+  btn.disabled = false; btn.textContent = '⟳ Re-analyze';
+}
+
+function renderSyncProposals(sessionsUsed, proposals) {
+  const body = document.getElementById('sync-modal-body');
+  const applyBtn = document.getElementById('sync-apply-btn');
+
+  if (!proposals.length) {
+    body.innerHTML = '<div class="sync-empty-state">✓ Groq found no meaningful updates to propose based on your recent sessions.<br><small style="color:var(--text-muted)">Your panels already reflect your current situation well.</small></div>';
+    applyBtn.style.display = 'none';
+    return;
+  }
+
+  // Group by panel
+  const byPanel = {};
+  proposals.forEach((p, i) => {
+    if (!byPanel[p.panel]) byPanel[p.panel] = [];
+    byPanel[p.panel].push({...p, idx: i});
+  });
+
+  const panelLabels = { audit:'Overview', care:'Care Protocols', personal:'Personal Strategy', business:'Business Strategy', future:'Path Forward' };
+
+  let html = `<div class="sync-sessions-used">📋 <strong>Based on:</strong> ${esc(sessionsUsed)}</div>`;
+
+  Object.entries(byPanel).forEach(([panel, items]) => {
+    html += `<div class="sync-panel-group">
+      <div class="sync-panel-label">${panelLabels[panel]||panel}</div>`;
+    items.forEach(p => {
+      html += `<div class="sync-diff-row">
+        <input type="checkbox" class="sync-diff-toggle" id="sync-chk-${p.idx}" checked>
+        <div class="sync-diff-body">
+          <div class="sync-diff-field">${esc(p.field)}</div>
+          ${p.oldVal ? `<div class="sync-diff-old">${esc(String(p.oldVal))}</div>` : ''}
+          <div class="sync-diff-new">→ ${esc(String(p.newVal))}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+
+  body.innerHTML = html;
+  applyBtn.style.display = '';
+}
+
+function applySessionSync() {
+  if (!_syncProposals.length) return;
+
+  let applied = 0;
+  _syncProposals.forEach((p, i) => {
+    const chk = document.getElementById(`sync-chk-${i}`);
+    if (!chk || !chk.checked) return;
+
+    // Resolve dot-path into VAULT and set value
+    const parts = p.path.split('.');
+    let obj = VAULT;
+    try {
+      for (let j = 0; j < parts.length - 1; j++) {
+        const key = isNaN(parts[j]) ? parts[j] : parseInt(parts[j]);
+        obj = obj[key];
+        if (obj === undefined || obj === null) throw new Error('bad path');
+      }
+      const lastKey = isNaN(parts[parts.length-1]) ? parts[parts.length-1] : parseInt(parts[parts.length-1]);
+      obj[lastKey] = p.newVal;
+      applied++;
+    } catch(e) {
+      console.warn('Sync path resolution failed:', p.path, e);
+    }
+  });
+
+  if (applied === 0) { showToast('No changes selected.'); return; }
+
+  saveToLocal();
+  renderAll();
+  closeSyncModal();
+  showToast(`✓ ${applied} change${applied===1?'':'s'} applied across your panels.`);
+}
+
 async function generateSessionSummary() {
   const problem  = document.getElementById('sess-problem').value;
   const solution = document.getElementById('sess-solution').value;
@@ -1533,7 +1803,7 @@ function saveSession() {
   // Switch to sessions tab, then render into the now-visible panel
   const sessBtn = [...document.querySelectorAll('.nav-tab')].find(b => b.textContent.trim() === 'Session Logs');
   if (sessBtn) switchTab('sessions', sessBtn);
-  renderSessions();
+  renderAll();
 
   closeAddSessionModal();
   showToast('✓ Session saved to vault.');
@@ -2773,7 +3043,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Modal backdrop close
-  ['addSessionModal','keyModal','modelModal','vaultModal','labReviewModal'].forEach(id => {
+  ['addSessionModal','keyModal','modelModal','vaultModal','labReviewModal','syncModal'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
   });
